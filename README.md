@@ -127,9 +127,9 @@ proxy-groups:
     interval: 180
     tolerance: 40
     proxies:
-      - "🇸🇬新加坡专线04|BGP|流媒体"
-      - "🇺🇸美国01|流媒体|0.1x"
-      - "🇯🇵日本专线04|BGP|流媒体"
+      - "🇸🇬 Singapore-01"
+      - "🇺🇸 UnitedStates-01"
+      - "🇯🇵 Japan-01"
 
   # 2. 故障无感容灾组 (主节点异常时按顺序无缝切换到备选节点)
   - name: 🛡️ Antigravity-Fallback
@@ -137,9 +137,9 @@ proxy-groups:
     url: https://generativelanguage.googleapis.com/generate-204
     interval: 120
     proxies:
-      - "🇸🇬新加坡专线04|BGP|流媒体"
-      - "🇺🇸美国01|流媒体|0.1x"
-      - "🇯🇵日本专线04|BGP|流媒体"
+      - "🇸🇬 Singapore-01"
+      - "🇺🇸 UnitedStates-01"
+      - "🇯🇵 Japan-01"
 
 rules:
   - DOMAIN-SUFFIX,generativelanguage.googleapis.com,🚀 Antigravity-Auto
