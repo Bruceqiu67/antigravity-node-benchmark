@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "antigravity-node-benchmark"
-version = "5.0.0"
-description = "Zero-Risk, Multi-Platform Node Stability & Egress Diagnostic Benchmark for Google AI & Antigravity"
+version = "7.0.0"
+description = "Zero-Risk, Multi-Platform Pragmatic Node Stability & Egress Diagnostic Benchmark for Google AI & Antigravity"
 readme = "README.md"
-authors = [{ name = "Antigravity Bench Authors" }]
+authors = [{ name = "Bruceqiu67" }]
 license = { text = "MIT" }
 requires-python = ">=3.8"
 keywords = [
@@ -41,5 +41,5 @@ classifiers = [
 antigravity-bench = "main:main"
 
 [project.urls]
-Homepage = "https://github.com"
-Repository = "https://github.com"
+Homepage = "https://github.com/Bruceqiu67/antigravity-node-benchmark"
+Repository = "https://github.com/Bruceqiu67/antigravity-node-benchmark"
