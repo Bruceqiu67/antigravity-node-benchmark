@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🛰️ Antigravity Node Benchmark (V5.0 Universal)
-Zero-Risk, Multi-Platform Node Stability & Egress Diagnostic Benchmark for Google AI & Antigravity
+🛰️ Antigravity Node Benchmark (V6.0 Deep Armor Edition)
+Zero-Risk, Multi-Platform Node Stability, Egress Diagnostic & Exit IP Fraud Audit for Google AI & Antigravity
 
 Features:
 - 100% Anonymous & Zero-Risk (Zero Auth / No API Key / No Account Required)
@@ -11,14 +11,19 @@ Features:
 - 8-Dimensional Full-Spectrum Diagnostic Matrix:
   1. Domestic Transit Direct Leak / Detached Exit (上海等国内中转直出拦截)
   2. Google AI Geofenced Regions (香港/澳门等受限出口)
-  3. OAuth & Token Refresh Blocked (accounts.google.com 认证阻断)
-  4. AI Application Layer Partial Block (AI Studio/Gemini 真实流量阻断)
-  5. Google Cloud Armor & WAF Cleanliness (脏 IP / 频控预警)
-  6. SSE Stream TTFB (Time to First Byte) & Jitter Analysis
-  7. Multi-round Stress Sampling & Isolated AI Loss Tracking
+  3. Google 503 Bot / Anti-Abuse Risk (IP 被 Google 标记为异常流量/503 阻断)
+  4. OAuth & Token Refresh Blocked (accounts.google.com 认证阻断)
+  5. AI Application Layer Partial Block (AI Studio/Gemini 真实流量阻断)
+  6. Google Cloud Armor & WAF Cleanliness (脏 IP / 频控预警)
+  7. SSE Stream TTFB (Time to First Byte) & Jitter Analysis
+  8. Multi-round Stress Sampling & Isolated AI Loss Tracking
+- Phase 2 Deep Exit IP & Fraud Audit (深度真实物理出口与套壳欺诈审计):
+  - 真实物理出口 IP 与真实地理位置探测 (Cloudflare Trace 抓包)
+  - 地区欺诈与套壳伪造精准识别 (如: 标称英国/美国，实测全在同一台日本机房)
+  - 同机房万人骑共享 IP 查重与公共云 (AWS/GCP/Alibaba) 风险警示
 - Exporters:
   - Real-time Console View (ANSI Color & Real-time Progress)
-  - Detailed Markdown Diagnostic Report (.md)
+  - Detailed Markdown Diagnostic Report (.md with Egress Audit Table)
   - Clash / Mihomo High-Availability Policy Group (.yaml with Auto & Fallback & Rules)
   - Sing-box Outbounds Configuration (.json)
 - 100% Python Standard Library (Zero Third-Party Dependencies)
@@ -64,6 +69,27 @@ BLOCKED_NAME_REGEX = re.compile(
     r'\bir\b|\biran\b|伊朗)'
 )
 
+# Advertised country patterns for cross-verifying claimed vs real exit location
+REGION_PATTERNS = [
+    (re.compile(r'(?i)香港|hk|hong\s*kong'), 'HK', '香港'),
+    (re.compile(r'(?i)台湾|tw|taiwan'), 'TW', '台湾'),
+    (re.compile(r'(?i)日本|jp|japan'), 'JP', '日本'),
+    (re.compile(r'(?i)新加坡|sg|singapore'), 'SG', '新加坡'),
+    (re.compile(r'(?i)美国|us|united\s*states|洛杉矶|la|硅谷|波特兰|西雅图'), 'US', '美国'),
+    (re.compile(r'(?i)英国|uk|united\s*kingdom|伦敦|london'), 'GB', '英国'),
+    (re.compile(r'(?i)德国|de|germany|法兰克福'), 'DE', '德国'),
+    (re.compile(r'(?i)法国|fr|france|巴黎'), 'FR', '法国'),
+    (re.compile(r'(?i)韩国|kr|korea|首尔'), 'KR', '韩国'),
+    (re.compile(r'(?i)加拿大|ca|canada'), 'CA', '加拿大'),
+    (re.compile(r'(?i)澳大利亚|au|australia|悉尼'), 'AU', '澳大利亚'),
+    (re.compile(r'(?i)印度|in|india'), 'IN', '印度'),
+    (re.compile(r'(?i)俄罗斯|ru|russia'), 'RU', '俄罗斯'),
+    (re.compile(r'(?i)土耳其|tr|turkey'), 'TR', '土耳其'),
+    (re.compile(r'(?i)尼日利亚|ng|nigeria'), 'NG', '尼日利亚'),
+    (re.compile(r'(?i)越南|vn|vietnam'), 'VN', '越南'),
+    (re.compile(r'(?i)乌克兰|ua|ukraine'), 'UA', '乌克兰'),
+]
+
 # Common controller ports across popular Clash/Mihomo clients
 AUTO_DISCOVERY_PORTS = [9090, 9097, 2049, 9999]
 
@@ -72,6 +98,14 @@ def is_region_name_blocked(name: str) -> bool:
     """Check if node name explicitly indicates a blocked region (safeguards 'CN2')."""
     name_clean = re.sub(r'(?i)\bcn2\b', '', name)
     return bool(BLOCKED_NAME_REGEX.search(name_clean))
+
+
+def parse_claimed_country(name: str):
+    """Extract advertised country from node name."""
+    for pat, code, label in REGION_PATTERNS:
+        if pat.search(name):
+            return code, label
+    return "UNKNOWN", "未标明"
 
 
 def auto_detect_controller(secret: str = "") -> str:
@@ -88,6 +122,19 @@ def auto_detect_controller(secret: str = "") -> str:
         except Exception:
             continue
     return "http://127.0.0.1:9090"
+
+
+def get_clash_configs(controller_url: str, secret: str = "") -> dict:
+    """Read Clash runtime configuration (mixed-port, mode, etc.)."""
+    endpoint = f"{controller_url.rstrip('/')}/configs"
+    req = urllib.request.Request(endpoint)
+    if secret:
+        req.add_header("Authorization", f"Bearer {secret}")
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return {"mixed-port": 7890}
 
 
 def get_clash_proxies(controller_url: str, secret: str = "") -> list:
@@ -184,7 +231,7 @@ def probe_direct_proxy_delay(proxy_url: str, target_url: str, timeout_ms: int = 
 
 
 def test_single_node(controller_url: str, secret: str, node_info: dict, timeout_ms: int = 3500) -> dict:
-    """Full-spectrum multi-probe & diagnostic engine (V5.0)."""
+    """Full-spectrum multi-probe & diagnostic engine (V6.0)."""
     proxy_name = node_info["name"]
     p_type = node_info.get("type", "Unknown")
 
@@ -218,35 +265,53 @@ def test_single_node(controller_url: str, secret: str, node_info: dict, timeout_
     auth_ok    = 0 < auth_delay < 99999
     studio_ok  = 0 < studio_delay < 99999
 
-    # 3. Diagnostic Matrix
-    if not cf_ok and not core_ok and not ai_ok:
+    # 3. Diagnostic Matrix (Strict Google AI Reachability Verification)
+
+    # Case A: Totally Dead / Offline
+    if not cf_ok and not core_ok and not ai_ok and not gemini_ok:
         return _f_result("🔴", "OFFLINE", "节点离线 / 无法建立网络连接 (TCP握手失败)")
 
-    if cf_ok and not core_ok and not ai_ok:
+    # Case B: Transit Direct Leak
+    if cf_ok and not core_ok and not ai_ok and not gemini_ok:
         return _f_result("🚨", "DOMESTIC_LEAK", "国内中转直出/落地脱机 (流量滞留上海等国内入口，Google 被 GFW 拦截)")
 
+    # Case C: Google AI Geofenced / Blocked
     if core_ok and not ai_ok and not gemini_ok:
         return _f_result("⛔", "AI_BLOCKED", "Google AI 区域拦截 (真实出口位于香港/不支持地区，AI 服务不可用)",
                          ttfb=core_delay, avg_delay=core_delay)
 
-    if ai_ok and not auth_ok:
+    # Case D: Google 503 Bot / Anti-Abuse Risk
+    if ai_ok and not gemini_ok:
+        return _f_result("🤖", "GEMINI_BLOCKED",
+                         f"Google 503 风控/异常流量拦截 (AI心跳正常，但 Gemini Web 报 503/阻断，IP 被 Google 风控)",
+                         ttfb=ai_delay, avg_delay=ai_delay)
+
+    # Case E: AI API Gateway Blocked while Web works
+    if gemini_ok and not ai_ok:
+        return _f_result("⛔", "AI_API_BLOCKED",
+                         f"Google AI API 网关阻断 (Gemini网页可用，但 generativelanguage 接口被拦截)",
+                         ttfb=gemini_delay, avg_delay=gemini_delay)
+
+    # Case F: Auth Blocked
+    if not auth_ok:
         return _f_result("🔑", "AUTH_BLOCKED",
                          f"OAuth 认证端点不可达 (AI延迟:{ai_delay}ms，但 accounts.google.com 被拦截，无法登录/刷新Token)",
                          ttfb=ai_delay, avg_delay=ai_delay)
 
-    if ai_ok and not studio_ok and not gemini_ok:
-        return _f_result("🔒", "AI_PARTIAL",
-                         f"AI 应用层受阻 (204健康检查通过但 AI Studio/Gemini 应用被拦截，延迟:{ai_delay}ms)",
+    # Case G: AI Studio Blocked
+    if not studio_ok:
+        return _f_result("🔒", "STUDIO_BLOCKED",
+                         f"AI Studio 应用层受阻 (204通过但 aistudio.google.com 被拦截，无法使用工作台)",
                          ttfb=ai_delay, avg_delay=ai_delay)
 
     waf_warning = ai_ok and not waf_ok
 
-    # 4. Stress Sampling: Reuse diagnostic data + Circuit Breaker
+    # 4. Stress Sampling: AI Gateway + Gemini Web + Edge Core
     samples = []
     ai_success = 0
     ai_total = 0
 
-    for delay_val, is_ai_ep in [(ai_delay, True), (auth_delay, False), (core_delay, False)]:
+    for delay_val, is_ai_ep in [(ai_delay, True), (gemini_delay, True), (core_delay, False)]:
         if 0 < delay_val < 99999:
             samples.append(delay_val)
             if is_ai_ep:
@@ -255,9 +320,9 @@ def test_single_node(controller_url: str, secret: str, node_info: dict, timeout_
             ai_total += 1
 
     probe_spec = [
-        (ENDPOINTS["AI_API"], True),
-        (ENDPOINTS["AUTH"],   False),
-        (ENDPOINTS["CORE"],   False),
+        (ENDPOINTS["AI_API"],     True),
+        (ENDPOINTS["GEMINI_WEB"], True),
+        (ENDPOINTS["CORE"],       False),
     ]
     round_fails = 0
     for ep_url, is_ai_ep in probe_spec:
@@ -346,8 +411,100 @@ def test_single_node(controller_url: str, secret: str, node_info: dict, timeout_
         "loss_rate": round(loss_rate, 1), "jitter": jitter,
         "score": score, "grade": grade, "tag": tag,
         "category": category, "waf_warning": waf_warning,
-        "reason": reason
+        "reason": reason,
+        "exit_ip": "Pending", "real_loc": "Pending", "mismatch": False, "shared_ip": False
     }
+
+
+def audit_candidate_exit_ips(controller_url: str, secret: str, mixed_port: int, candidate_results: list):
+    """
+    Phase 2: Deep Exit IP, Region Mismatch & Datacenter Cloud Audit.
+    Audits candidates by tracing real exit IP and cross-verifying claimed country vs actual exit location.
+    """
+    if not candidate_results:
+        return
+
+    print("\n" + "=" * 88, flush=True)
+    print(" 🕵️ 启动 Phase 2: 真实出口 IP 归属地与套壳伪造深度审计 (Egress Fraud Audit)", flush=True)
+    print("=" * 88, flush=True)
+
+    proxy_handler = urllib.request.ProxyHandler({
+        'http': f'http://127.0.0.1:{mixed_port}',
+        'https': f'http://127.0.0.1:{mixed_port}'
+    })
+    opener = urllib.request.build_opener(proxy_handler)
+
+    ip_counter = {}
+
+    for res in candidate_results:
+        node_name = res["name"]
+        claimed_code, claimed_name = parse_claimed_country(node_name)
+
+        # Switch GLOBAL proxy to test node
+        req_sw = urllib.request.Request(
+            f"{controller_url.rstrip('/')}/proxies/GLOBAL",
+            data=json.dumps({"name": node_name}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT"
+        )
+        if secret:
+            req_sw.add_header("Authorization", f"Bearer {secret}")
+
+        try:
+            urllib.request.urlopen(req_sw, timeout=2.5)
+        except Exception:
+            res["exit_ip"] = "SwitchFail"
+            res["real_loc"] = "Unknown"
+            continue
+
+        # Trace exit IP & location
+        exit_ip = "Unknown"
+        real_loc = "Unknown"
+        try:
+            req_trace = urllib.request.Request("https://cloudflare.com/cdn-cgi/trace", headers={'User-Agent': 'curl/7.68.0'})
+            with opener.open(req_trace, timeout=3.5) as r:
+                lines = r.read().decode('utf-8', errors='ignore').strip().split('\n')
+                ip_map = dict(line.split('=', 1) for line in lines if '=' in line)
+                exit_ip = ip_map.get('ip', 'Unknown')
+                real_loc = ip_map.get('loc', 'Unknown')
+        except Exception:
+            pass
+
+        res["exit_ip"] = exit_ip
+        res["real_loc"] = real_loc
+        res["claimed_country"] = claimed_name
+
+        if exit_ip != "Unknown":
+            ip_counter[exit_ip] = ip_counter.get(exit_ip, 0) + 1
+
+        # Check region mismatch
+        is_mismatch = (claimed_code != "UNKNOWN" and real_loc != "UNKNOWN" and claimed_code != real_loc)
+        res["mismatch"] = is_mismatch
+
+    # Process mismatch & shared IP deductions
+    for res in candidate_results:
+        exit_ip = res.get("exit_ip", "Unknown")
+        shared_count = ip_counter.get(exit_ip, 0)
+        is_shared_pool = shared_count >= 3
+        res["shared_ip"] = is_shared_pool
+
+        if res["mismatch"]:
+            res["score"] = max(0, res["score"] - 30)
+            res["grade"] = "C"
+            res["tag"] = "🚩"
+            res["category"] = "FAKE_REGION"
+            res["reason"] = f"🚨 假地区/套壳伪造 (名称标称{res['claimed_country']}, 实测出口在{res['real_loc']})"
+            print(f"  🚩 [套壳欺诈拦截] {res['name']:<22} | 标称: {res['claimed_country']:<4} -> 实测出口: {res['real_loc']} ({exit_ip})", flush=True)
+        elif is_shared_pool:
+            res["score"] = max(0, res["score"] - 12)
+            if res["grade"] == "S":
+                res["grade"] = "A"
+            res["reason"] += f" | ⚠️ 共享机房池 ({shared_count}个节点共用同一出口IP)"
+            print(f"  ⚠️ [共享机房警示] {res['name']:<22} | 真实出口: {res['real_loc']} ({exit_ip}) | 共用节点数: {shared_count}", flush=True)
+        else:
+            print(f"  ✅ [真实出口合规] {res['name']:<22} | 真实出口: {res['real_loc']} ({exit_ip})", flush=True)
+
+    print("-" * 88, flush=True)
 
 
 def benchmark_direct_proxy(proxy_url: str, timeout_ms: int = 3500) -> dict:
@@ -373,7 +530,7 @@ def benchmark_direct_proxy(proxy_url: str, timeout_ms: int = 3500) -> dict:
         d = probe_direct_proxy_delay(proxy_url, ep, timeout_ms)
         status = f"✅ {d} ms" if 0 < d < 99999 else "❌ 阻断/超时"
         print(f"  [{name:<16}] -> {status}", flush=True)
-        if 0 < d < 99999 and ep in [ENDPOINTS["AI_API"], ENDPOINTS["AUTH"], ENDPOINTS["CORE"]]:
+        if 0 < d < 99999 and ep in [ENDPOINTS["AI_API"], ENDPOINTS["AUTH"], ENDPOINTS["CORE"], ENDPOINTS["GEMINI_WEB"]]:
             samples.append(d)
 
     print("\n" + "-" * 88, flush=True)
@@ -471,13 +628,13 @@ def export_singbox_outbounds(s_tier: list, a_tier: list, b_tier: list, output_pa
 
 
 def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_tier, blocked_tier, offline_tier, report_path="ANTIGRAVITY_NODE_REPORT.md"):
-    """Generate comprehensive Markdown Benchmark Report."""
+    """Generate comprehensive Markdown Benchmark Report with Egress Audit Table."""
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    md_content = f"""# 🛰️ Antigravity 专属高可用节点与真实出口评级报告 (V5.0)
+    md_content = f"""# 🛰️ Antigravity 专属高可用节点与真实出口评级报告 (V6.0 Deep Armor)
 
 > **测试时间**: `{now_str}`  
-> **探测机制**: 8 维交叉全息矩阵 (CF基准 + Google Core + Google AI + Gemini Web + OAuth认证 + AI Studio + WAF洁净度)  
+> **探测机制**: 8 维交叉全息矩阵 + Phase 2 真实物理出口与套壳欺诈深度审计  
 > **安全保证**: 100% 匿名无感探测 / 0 账号风险 / 纯网络层探针
 
 ---
@@ -486,19 +643,19 @@ def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_t
 
 | 评级分类 | 数量 | 适用场景 / 诊断特征 | 处置建议 |
 | :--- | :--- | :--- | :--- |
-| 🌟 **S 级 (黄金节点)** | **{len(s_tier)}** | 0 丢包、极低延迟，最适合长代码流式输出与连续高频对话 | **⭐ 强力首选主力** |
+| 🌟 **S 级 (黄金节点)** | **{len(s_tier)}** | 0 丢包、极低延迟，真实出口相符，最适合长代码流式输出 | **⭐ 强力首选主力** |
 | 🟢 **A 级 (优质主力)** | **{len(a_tier)}** | 0 丢包、延迟稳定，Google AI 全端点通畅 | **可作为常用节点** |
 | 🟡 **B 级 (普通备选)** | **{len(b_tier)}** | 偶发微抖动，普通对话可用 | 作为应急备用 |
-| 🟠 **C 级 (易断流)** | **{len(c_tier)}** | 高延迟或高丢包，长连接中途易中断/报错 | **不推荐** |
+| 🟠 **C 级 (易断流/假地区)** | **{len(c_tier)}** | 高延迟、高丢包或套壳伪造假地区 | **不推荐** |
 | 🚨 **假海外 (国内直出)** | **{len(leak_tier)}** | 落地机失效，流量滞留上海/国内中转直出，被 GFW 拦截 | **必须弃用 (无法使用AI)** |
-| ⛔ **地区封锁 (AI受限)** | **{len(blocked_tier)}** | 香港/澳门出口受限、OAuth阻断或AI应用层拦截 | **严禁在 Antigravity 中使用** |
+| ⛔ **地区封锁 (AI受限)** | **{len(blocked_tier)}** | 香港/澳门出口、503风控拦截、OAuth阻断或AI应用层拦截 | **严禁在 Antigravity 中使用** |
 | 🔴 **彻底离线 (无法连接)** | **{len(offline_tier)}** | 节点服务器宕机或网络中断 | 建议从订阅移除 |
 
 ---
 
 ## 🏆 Antigravity 推荐可用排行榜 (S & A 级推荐)
 
-| 排名 | 综合评分 | 节点名称 | 协议 (Protocol) | 首包 TTFB | 平均延迟 | 抖动 (Jitter) | 丢包率 | 状态评价 |
+| 排名 | 综合评分 | 节点名称 | 协议 | 首包 TTFB | 平均延迟 | 抖动 | 丢包率 | 状态评价 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 """
     rank = 1
@@ -511,7 +668,24 @@ def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_t
         rank += 1
 
     if not s_tier and not a_tier:
-        md_content += "| - | - | *(暂无可推荐的 S/A 级节点)* | - | - | - | - | - | 请更换优质机场专线或使用 HY2 节点 |\n"
+        md_content += "| - | - | *(暂无可推荐的 S/A 级节点，建议更换优质 BGP/IEPL 专线机场)* | - | - | - | - | - | 请更换优质机场专线 |\n"
+
+    # Deep Egress Audit Table
+    audited_nodes = [r for r in all_results if r.get("exit_ip") not in ["Pending", "SwitchFail", "Unknown", None]]
+    if audited_nodes:
+        md_content += """
+---
+
+## 🕵️ 候选节点真实物理出口与套壳伪装审计表 (Egress Location Audit)
+> ⚠️ **防坑审计说明**：部分服务商标称全球节点，但底层实际将流量全部汇聚到同一台机房。以下为实测抓包出口与标称对比：
+
+| 节点名称 | 标称地区 | 实测出口国家 | 实测物理 IP | 套壳伪装判定 |
+| :--- | :--- | :--- | :--- | :--- |
+"""
+        for r in audited_nodes:
+            mismatch_tag = "🚨 地区欺诈/套壳" if r.get("mismatch") else "✅ 真实相符"
+            shared_tag = " (⚠️ 共享机房池)" if r.get("shared_ip") else ""
+            md_content += f"| `{r['name']}` | `{r.get('claimed_country', '未知')}` | `{r.get('real_loc', '未知')}` | `{r.get('exit_ip', '未知')}` | {mismatch_tag}{shared_tag} |\n"
 
     if leak_tier:
         md_content += """
@@ -530,8 +704,8 @@ def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_t
         md_content += """
 ---
 
-## ⛔ 地区封锁 / 认证受阻节点 (AI 受限出口)
-> ⚠️ **拦截提示**：以下节点的出口 IP 位于不支持地区，或 OAuth 认证端点 / AI Studio 应用层被拦截：
+## ⛔ 地区封锁 / 503风控 / 认证受阻节点 (AI 受限出口)
+> ⚠️ **拦截提示**：以下节点的出口 IP 位于不支持地区，或触发 Google 503 风控 / OAuth 认证端点被拦截：
 
 | 节点名称 | 协议 | 诊断结果 |
 | :--- | :--- | :--- |
@@ -554,7 +728,7 @@ def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_t
         md_content += """
 ---
 
-## 🟠 C 级易断流节点 (建议避开)
+## 🟠 C 级易断流 / 套壳假地区节点 (建议避开)
 | 节点名称 | 协议 | 评分 | 丢包率 | 诊断说明 |
 | :--- | :--- | :--- | :--- | :--- |
 """
@@ -563,7 +737,7 @@ def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_t
 
     md_content += f"""
 ---
-*本报告由 Antigravity 智能高可用与出口诊断探针自动生成。*
+*本报告由 Antigravity 智能高可用与真实出口审计探针自动生成。*
 """
 
     with open(report_path, "w", encoding="utf-8") as f:
@@ -572,12 +746,14 @@ def generate_markdown_report(all_results, s_tier, a_tier, b_tier, c_tier, leak_t
 
 def run_controller_benchmark(controller_url: str, secret: str = "", max_workers: int = 16, timeout_ms: int = 3500, keyword: str = None, report_path: str = "ANTIGRAVITY_NODE_REPORT.md", yaml_path: str = "antigravity_policy_group.yaml", singbox_path: str = None):
     print("=" * 88, flush=True)
-    print(" 🚀 Antigravity / Google AI 节点高可用度与真实出口诊断工具 (V5.0 Universal)", flush=True)
+    print(" 🚀 Antigravity / Google AI 节点高可用度与真实出口审计工具 (V6.0 Deep Armor)", flush=True)
     print("=" * 88, flush=True)
     print(f"📡 控制接口: {controller_url}", flush=True)
 
     try:
         all_proxies = get_clash_proxies(controller_url, secret)
+        clash_cfg = get_clash_configs(controller_url, secret)
+        mixed_port = clash_cfg.get("mixed-port", 7890)
     except Exception as e:
         print(f"\n❌ [连接错误]: {e}\n", flush=True)
         return
@@ -590,8 +766,8 @@ def run_controller_benchmark(controller_url: str, secret: str = "", max_workers:
         print("⚠️ 未发现匹配的代理节点，请检查客户端配置与订阅加载情况。", flush=True)
         return
 
-    print(f"📊 已拉取到 {total_count} 个节点 | 启用【8维全息矩阵 / WAF风控 / 中转直出 / OAuth阻断 / TTFB加权】引擎", flush=True)
-    print(f"⚡ 启动多线程并发探测 (并发: {max_workers})...", flush=True)
+    print(f"📊 已拉取到 {total_count} 个节点 | 启用【8维全息矩阵 / 503风控 / 套壳欺诈审计 / TTFB加权】引擎", flush=True)
+    print(f"⚡ 启动 Phase 1 多线程并发初筛 (并发: {max_workers})...", flush=True)
     print("-" * 88, flush=True)
 
     results = []
@@ -614,6 +790,10 @@ def run_controller_benchmark(controller_url: str, secret: str = "", max_workers:
 
             print(f"[{completed:2d}/{total_count:2d}] {res['tag']} {score_str} {res['name'][:22]:<22} [{res['type']:<9}] -> {delay_str:<7} {ttfb_str:<10} {loss_str:<8} | {res['reason']}", flush=True)
 
+    # Phase 2: Audit top candidate nodes for real exit IP & region mismatch
+    candidates = [r for r in results if r["grade"] in ["S", "A", "B"] or r["score"] >= 50]
+    audit_candidate_exit_ips(controller_url, secret, mixed_port, candidates)
+
     results.sort(key=lambda x: (-x["score"], x["avg_delay"]))
 
     s_tier = [r for r in results if r["grade"] == "S"]
@@ -622,19 +802,19 @@ def run_controller_benchmark(controller_url: str, secret: str = "", max_workers:
     c_tier = [r for r in results if r["grade"] == "C"]
 
     leak_tier = [r for r in results if r.get("category") == "DOMESTIC_LEAK"]
-    blocked_tier = [r for r in results if r.get("category") in ["BLOCKED_REGION", "AI_BLOCKED", "AUTH_BLOCKED", "AI_PARTIAL"]]
+    blocked_tier = [r for r in results if r.get("category") in ["BLOCKED_REGION", "AI_BLOCKED", "GEMINI_BLOCKED", "AI_API_BLOCKED", "AUTH_BLOCKED", "STUDIO_BLOCKED", "AI_PARTIAL"]]
     offline_tier = [r for r in results if r.get("category") == "OFFLINE"]
 
     print("\n" + "=" * 88, flush=True)
-    print(" 📋 Antigravity 综合质量与出口诊断天梯榜 (Quality & Egress Diagnostic Summary)", flush=True)
+    print(" 📋 Antigravity 综合质量与真实出口审计天梯榜 (Quality & Fraud Audit Summary)", flush=True)
     print("=" * 88, flush=True)
-    print(f"  🌟 S 级·黄金节点 (90~100分, 0丢包/极速/纯净)   : {len(s_tier)} 个  <-- 强力首选！", flush=True)
-    print(f"  🟢 A 级·优质主力 (70~89分, 稳定低抖动)       : {len(a_tier)} 个  <-- 靠谱可用", flush=True)
-    print(f"  🟡 B 级·普通备用 (50~69分, 偶发微抖动)       : {len(b_tier)} 个", flush=True)
-    print(f"  🟠 C 级·易断流   (高延迟/高丢包, 易卡顿)     : {len(c_tier)} 个  <-- 建议弃用", flush=True)
+    print(f"  🌟 S 级·黄金节点 (90~100分, 0丢包/出口相符)     : {len(s_tier)} 个  <-- 强力首选！", flush=True)
+    print(f"  🟢 A 级·优质主力 (70~89分, 稳定低抖动)         : {len(a_tier)} 个  <-- 靠谱可用", flush=True)
+    print(f"  🟡 B 级·普通备用 (50~69分, 偶发微抖动)         : {len(b_tier)} 个", flush=True)
+    print(f"  🟠 C 级·易断流/套壳 (高延迟/丢包/套壳假地区)   : {len(c_tier)} 个  <-- 建议弃用", flush=True)
     print(f"  🚨 假节点·国内直出 (走上海等国内中转/落地脱机) : {len(leak_tier)} 个  <-- 必须剔除！", flush=True)
-    print(f"  ⛔ 封锁·地区受限 (香港/OAuth阻断/AI应用受阻)   : {len(blocked_tier)} 个  <-- 严禁使用", flush=True)
-    print(f"  🔴 离线·彻底失效 (无法连接服务器)            : {len(offline_tier)} 个", flush=True)
+    print(f"  ⛔ 封锁·地区受限 (香港/503风控/OAuth阻断)       : {len(blocked_tier)} 个  <-- 严禁使用", flush=True)
+    print(f"  🔴 离线·彻底失效 (无法连接服务器)              : {len(offline_tier)} 个", flush=True)
     print("=" * 88, flush=True)
 
     generate_markdown_report(results, s_tier, a_tier, b_tier, c_tier, leak_tier, blocked_tier, offline_tier, report_path)
@@ -643,7 +823,7 @@ def run_controller_benchmark(controller_url: str, secret: str = "", max_workers:
     if singbox_path:
         export_singbox_outbounds(s_tier, a_tier, b_tier, singbox_path)
 
-    print(f"\n📄 深度评分报告已保存至: {report_path}", flush=True)
+    print(f"\n📄 深度评分与出口审计报告已保存至: {report_path}", flush=True)
     if s_tier or a_tier:
         print(f"🛡️ Antigravity 专属高可用策略组已导出至: {yaml_path}", flush=True)
         if singbox_path:
@@ -652,7 +832,7 @@ def run_controller_benchmark(controller_url: str, secret: str = "", max_workers:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Antigravity / Google AI Node Stability & Zero-Risk Benchmark Tool (V5.0 Universal)")
+    parser = argparse.ArgumentParser(description="Antigravity / Google AI Node Stability & Exit IP Fraud Audit Benchmark (V6.0)")
     parser.add_argument("--api", default=None, help="Clash/Mihomo External Controller URL (默认自动探测 9090/9097/2049)")
     parser.add_argument("--secret", default="", help="External Controller Secret (若未设置可留空)")
     parser.add_argument("--proxy", default=None, help="指定本地代理地址直接测试 (如 http://127.0.0.1:7890 或 socks5://127.0.0.1:10808)")
